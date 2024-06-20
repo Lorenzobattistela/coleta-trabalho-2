@@ -1,7 +1,13 @@
-from pysus.online_data.Infodengue import search_string, download
+# from pysus.online_data.Infodengue import search_string, download
 import os
 import pandas as pd
-from wikipedia_scrap import get_metropolitan_cities
+# from wikipedia_scrap import get_metropolitan_cities
+
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 YYYYWWSTART = 201301
 YYYYWWFINISH = 202401
@@ -12,8 +18,16 @@ YYYYWWFINISH = 202401
 # TODO: Plot temporal de casos por mês por cidade
 # TODO: Regressão linear tendo como target o numero de casos e usando umidade, temperatura etc como features
 
-CITIES = get_metropolitan_cities()
-USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localidade_id", "id", "versao_modelo", "tweet", "Rt", "tempmin", "umidmax", "nivel_inc", "umidmin", "tempmax", "casprov_est", "casprov_est_min", "casprov_est_max", "casconf", "notif_accum_year"]
+# CITIES = get_metropolitan_cities()
+# USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localidade_id", "id", "versao_modelo", "tweet", "Rt", "tempmin", "umidmax", "nivel_inc", "umidmin", "tempmax", "casprov_est", "casprov_est_min", "casprov_est_max", "casconf", "notif_accum_year"]
+
+def multiple_linear_regresion():
+  dataset = pd.read_csv("combined.csv")
+  # dataset.replace('', np.nan, inplace=True)
+  # dataset.ffill()
+  # print(dataset.isnull())
+  print(dataset.isnull().sum())
+
 
 def clean_city_name(city_name):
   city_name = city_name.replace(" ", "_")
@@ -52,15 +66,20 @@ def concatenate_csv_files(directory):
 
     for file in csv_files:
         file_path = os.path.join(directory, file)
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, sep=(','), na_values=[''])
+        df.replace('', np.nan, inplace=True)
         df_list.append(df)
-
     combined_df = pd.concat(df_list, ignore_index=True)
     combined_df.rename(columns={'Unnamed: 0': 'id'}, inplace=True)
-    return combined_df
+    print(len(df_list))
+    print("here")
 
-for city in CITIES:
-  get_city_data(city)
+    aux = combined_df.ffill(axis=1)
+    return aux
+
+# for city in CITIES:
+#   get_city_data(city)
 
 combined_csv = concatenate_csv_files('data')
 combined_csv.to_csv('combined.csv', index=False)
+multiple_linear_regresion()
