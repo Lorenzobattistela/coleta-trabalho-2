@@ -1,3 +1,5 @@
+from numpy import NAN
+import math
 from pysus.online_data.Infodengue import search_string, download
 import os
 import pandas as pd
@@ -13,7 +15,8 @@ YYYYWWFINISH = 202401
 # TODO: Regressão linear tendo como target o numero de casos e usando umidade, temperatura etc como features
 
 CITIES = get_metropolitan_cities()
-USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localidade_id", "id", "versao_modelo", "tweet", "Rt", "tempmin", "umidmax", "nivel_inc", "umidmin", "tempmax", "casprov_est", "casprov_est_min", "casprov_est_max", "casconf", "notif_accum_year"]
+USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localidade_id", "id", "versao_modelo", "tweet", "Rt", "nivel_inc", "casprov_est", "casprov_est_min", "casprov_est_max", "casconf", "notif_accum_year", "casprov"]
+TEMP_UMID_COLS = ["tempmed", "tempmax", "tempmin", "umidmed", "umidmin", "umidmax"]
 
 def clean_city_name(city_name):
   city_name = city_name.replace(" ", "_")
@@ -22,6 +25,64 @@ def clean_city_name(city_name):
   city_name = city_name.replace("\303\255", "i")
   city_name = city_name.replace("\303\251", "e")
   return city_name
+
+
+def fix_umidade(df):
+    umid_med = df['umidmed']
+    umid_min = df['umidmin']
+    umid_max = df['umidmax']
+
+    umid_correct = []
+
+    last_correct = 0
+    for (umed, umin, umax) in zip(umid_med, umid_min, umid_max):
+        if not math.isnan(umed):
+            umid_correct.append(umed)
+            last_correct  = umed
+        else:
+            tmin_not_nan = not math.isnan(umin)
+            tmax_not_nan = not math.isnan(umax)
+            if tmin_not_nan and tmax_not_nan:
+                new_med = (umin + umax) / 2
+                umid_correct.append(new_med)
+                last_correct = new_med
+            elif tmin_not_nan:
+                umid_correct.append(umin)
+                lsat_correct = umin
+            else:
+                umid_correct.append(last_correct)
+
+    df['umidade'] = umid_correct
+    return df
+
+
+def fix_temperature(df):
+    temp_med = df['tempmed']
+    temp_min = df['tempmin']
+    temp_max = df['tempmax']
+
+    temp_correct = []
+
+    last_correct = 0
+    for (tmed, tmin, tmax) in zip(temp_med, temp_min, temp_max):
+        if not math.isnan(tmed):
+            temp_correct.append(tmed)
+            last_correct  = tmed
+        else:
+            tmin_not_nan = not math.isnan(tmin)
+            tmax_not_nan = not math.isnan(tmax)
+            if tmin_not_nan and tmax_not_nan:
+                temp_med = (tmin + tmax) / 2
+                temp_correct.append(tmed)
+                last_correct = tmed
+            elif tmin_not_nan:
+                temp_correct.append(tmin)
+                lsat_correct = tmin
+            else:
+                temp_correct.append(last_correct)
+
+    df['temperatura'] = temp_correct
+    return df
 
 def get_city_data(city_name):
     city_name = clean_city_name(city_name)
@@ -38,6 +99,9 @@ def get_city_data(city_name):
     df['data_iniSE'] = df['data_iniSE'].str.slice(0, 7)
     df = collapse_to_monthly(df)
     df['city'] = city_name
+    df = fix_temperature(df)
+    df = fix_umidade(df)
+    df = df.drop(TEMP_UMID_COLS, axis=1)
 
     df.to_csv(f'data/{city_name}.csv')
     print(f"Downloaded dengue file for city {city_name}!")
@@ -56,7 +120,7 @@ def concatenate_csv_files(directory):
         df_list.append(df)
 
     combined_df = pd.concat(df_list, ignore_index=True)
-    combined_df.rename(columns={'Unnamed: 0': 'id'}, inplace=True)
+    combined_df.rename(columns={'Unnamed: 0': 'id', 'umidmed': 'umidade', 'tempmed': 'temperatura'}, inplace=True)
     return combined_df
 
 for city in CITIES:
@@ -64,3 +128,5 @@ for city in CITIES:
 
 combined_csv = concatenate_csv_files('data')
 combined_csv.to_csv('combined.csv', index=False)
+combined_csv = pd.read_csv("combined.csv")
+print(combined_csv.isnull().sum())
