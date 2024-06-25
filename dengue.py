@@ -1,28 +1,23 @@
 from numpy import NAN
 import math
-# from pysus.online_data.Infodengue import search_string, download
+from pysus.online_data.Infodengue import search_string, download
 import os
 import pandas as pd
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
-# from wikipedia_scrap import get_metropolitan_cities
+from wikipedia_scrap import get_metropolitan_cities
+from matplotlib.dates import DateFormatter
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 YYYYWWSTART = 201301
 YYYYWWFINISH = 202401
 
-# TODO: juntar 4 colunas de semana em 1 de mês (comprimir por mes)
-
-# Cidades: regiao metropolina de POA
-# TODO: Plot temporal de casos por mês por cidade
-# TODO: Regressão linear tendo como target o numero de casos e usando umidade, temperatura etc como features
-
-# CITIES = get_metropolitan_cities()
+CITIES = get_metropolitan_cities()
 USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localidade_id", "id", "versao_modelo", "tweet", "Rt", "nivel_inc", "casprov_est", "casprov_est_min", "casprov_est_max", "casconf", "notif_accum_year", "casprov"]
 TEMP_UMID_COLS = ["tempmed", "tempmax", "tempmin", "umidmed", "umidmin", "umidmax"]
-
-
 
 def create_temporal_series(csv_path):
     data = pd.read_csv(csv_path)
@@ -113,26 +108,42 @@ def fix_temperature(df):
     return df
 
 def get_city_data(city_name):
-    city_name = clean_city_name(city_name)
-    if (os.path.exists(f"./data/{city_name}.csv")):
-        print(f"City {city_name} already exists.")
-        return
-
-    df = download('dengue', YYYYWWSTART, YYYYWWFINISH, city_name)
-    if df is None:
-      print(f"Could not download dengue file for city {city_name}!")
+  search_name = city_name
+  city_name = clean_city_name(city_name)
+  if (os.path.exists(f"./data/{city_name}.csv")):
+      print(f"City {city_name} already exists.")
       return
-    df = df.transpose()
-    df = df.drop(USELESS_COLS, axis=1)
-    df['data_iniSE'] = df['data_iniSE'].str.slice(0, 7)
-    df = collapse_to_monthly(df)
-    df['city'] = city_name
-    df = fix_temperature(df)
-    df = fix_umidade(df)
-    df = df.drop(TEMP_UMID_COLS, axis=1)
 
-    df.to_csv(f'data/{city_name}.csv')
-    print(f"Downloaded dengue file for city {city_name}!")
+  search_results = search_string(search_name)
+
+  if not search_results:
+    print(f"Could not find city {city_name}!")
+    return
+
+  if len(search_results) > 1:
+    print(f"Multiple cities found for {city_name}:")
+    for i, result in enumerate(search_results):
+      if result == search_name:
+        print(f"{i}: {result} (exact match)")
+        search_name = result
+        break;
+
+  df = download('dengue', YYYYWWSTART, YYYYWWFINISH, search_name)
+
+  if df is None:
+    print(f"Could not download dengue file for city {city_name}!")
+    return
+  df = df.transpose()
+  df = df.drop(USELESS_COLS, axis=1)
+  df['data_iniSE'] = df['data_iniSE'].str.slice(0, 7)
+  df = collapse_to_monthly(df)
+  df['city'] = city_name
+  df = fix_temperature(df)
+  df = fix_umidade(df)
+  df = df.drop(TEMP_UMID_COLS, axis=1)
+
+  df.to_csv(f'data/{city_name}.csv')
+  print(f"Downloaded dengue file for city {city_name}!")
 
 
 def collapse_to_monthly(df):
@@ -151,16 +162,14 @@ def concatenate_csv_files(directory):
     combined_df.rename(columns={'Unnamed: 0': 'id', 'umidmed': 'umidade', 'tempmed': 'temperatura'}, inplace=True)
     return combined_df
 
-# for city in CITIES:
-#   get_city_data(city)
+data_directory = './data'
+file_count = len([name for name in os.listdir(data_directory) if os.path.isfile(os.path.join(data_directory, name))])
 
-
+if file_count < 34:
+  for city in CITIES:
+    get_city_data(city)
 
 
 if __name__ == "__main__":
-
-    # combined_csv = concatenate_csv_files('data')
-    # combined_csv.to_csv('combined.csv', index=False)
-    # combined_csv = pd.read_csv("combined.csv")
-    # print(combined_csv.isnull().sum())
-    create_temporal_series("combined.csv")
+  combined_csv = concatenate_csv_files('data')
+  combined_csv.to_csv('combined.csv', index=False)
