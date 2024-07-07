@@ -1,11 +1,12 @@
 from numpy import NAN
 import math
-from pysus.online_data.Infodengue import search_string, download
+# from pysus.online_data.Infodengue import search_string, download
 import os
 import pandas as pd
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
 from wikipedia_scrap import get_metropolitan_cities
 from matplotlib.dates import DateFormatter
@@ -20,24 +21,45 @@ USELESS_COLS = ["casos_est_min", "casos_est_max", "p_rt1", "p_inc100k", "Localid
 TEMP_UMID_COLS = ["tempmed", "tempmax", "tempmin", "umidmed", "umidmin", "umidmax"]
 
 def create_temporal_series(csv_path):
+    # Load data
     data = pd.read_csv(csv_path)
-    X = data[["temperatura","umidade","pop"]]
+
+    # Data Exploration (Optional)
+    print(data.describe())
+    # sns.pairplot(data)
+    # plt.show()
+
+    # Feature and target extraction
+    X = data[["temperatura", "umidade", "pop"]]
     Y = data["casos"]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.1, random_state=42)
+    # Scale features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
+    # Train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, Y, test_size=0.1, random_state=42)
+
+    # Model training and tuning
     model = LinearRegression()
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    # Calculate metrics
+    params = {'fit_intercept': [True, False], 'copy_X': [True, False], 'n_jobs': [None, -1, 1]}
+
+    grid_search = GridSearchCV(model, param_grid=params, cv=5, scoring='neg_mean_squared_error')
+    grid_search.fit(X_train, y_train)
+
+    # Best model
+    best_model = grid_search.best_estimator_
+    y_pred = best_model.predict(X_test)
+
+    # Metrics
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
 
     print(f'Mean Squared Error: {mse}')
     print(f'R-squared: {r2}')
 
-    # Display the coefficients
-    coefficients = pd.DataFrame(model.coef_, X.columns,columns=['Coefficient'])
+    # Coefficients
+    coefficients = pd.DataFrame(best_model.coef_, index=["temperatura", "umidade", "pop"], columns=['Coefficient'])
     print(coefficients)
 
 
@@ -162,14 +184,15 @@ def concatenate_csv_files(directory):
     combined_df.rename(columns={'Unnamed: 0': 'id', 'umidmed': 'umidade', 'tempmed': 'temperatura'}, inplace=True)
     return combined_df
 
-data_directory = './data'
-file_count = len([name for name in os.listdir(data_directory) if os.path.isfile(os.path.join(data_directory, name))])
+# data_directory = './data'
+# file_count = len([name for name in os.listdir(data_directory) if os.path.isfile(os.path.join(data_directory, name))])
 
-if file_count < 34:
-  for city in CITIES:
-    get_city_data(city)
+# if file_count < 34:
+#   for city in CITIES:
+#     get_city_data(city)
 
 
 if __name__ == "__main__":
-  combined_csv = concatenate_csv_files('data')
-  combined_csv.to_csv('combined.csv', index=False)
+  # combined_csv = concatenate_csv_files('data')
+  # combined_csv.to_csv('combined.csv', index=False)
+  create_temporal_series("combined.csv")
